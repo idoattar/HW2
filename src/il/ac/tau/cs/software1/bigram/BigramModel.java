@@ -1,7 +1,12 @@
 package il.ac.tau.cs.software1.bigram;
 
 import java.io.IOException;
+import java.lang.annotation.ElementType;
 import java.util.Locale;
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.FileReader;
+import java.io.FileWriter;
 
 public class BigramModel {
     public static final int MAX_VOCABULARY_SIZE = 14500;
@@ -79,8 +84,32 @@ public class BigramModel {
      * @post: mBigramCounts = prev(mBigramCounts)
      */
     public String[] buildVocabularyIndex(String fileName) throws IOException { // Question 1
-        // TODO: implement
-        return null;
+        String[] temp_voca = new String[MAX_VOCABULARY_SIZE];
+        int count = 0;
+        try (BufferedReader reader = new BufferedReader(new FileReader(fileName))){
+            String line;
+            while ((line = reader.readLine()) != null && count < MAX_VOCABULARY_SIZE){
+                String trimmed = line.trim();
+                if (trimmed.isEmpty()){
+                    continue;
+                }
+                String[] tokens = trimmed.split("\\s+");
+                for (int i =0;i<tokens.length && count < MAX_VOCABULARY_SIZE;i++){
+                    String word = normalizeWord(tokens[i]);
+                    if (word != null && findIndex(temp_voca,word)==ELEMENT_NOT_FOUND){
+                            temp_voca[count] = word;
+                            count++;
+                    }
+                }
+
+            }
+        }
+        String [] vocabulary = new String[count];
+        for (int i=0;i<count;i++){
+            vocabulary[i] = temp_voca[i];
+        }
+
+        return vocabulary;
     }
 
     /*
@@ -88,8 +117,29 @@ public class BigramModel {
      * @post: mBigramCounts = prev(mBigramCounts)
      */
     public int[][] buildCountsArray(String fileName, String[] vocabulary) throws IOException { // Question 2
-        // TODO: implement
-        return null;
+        int n = vocabulary.length;
+        int [][] counts = new int[n][n];
+        try (BufferedReader reader = new BufferedReader(new FileReader(fileName))){
+            String line;
+            while ((line = reader.readLine()) != null){
+                String trimmed = line.trim();
+                if (trimmed.isEmpty()){
+                    continue;
+                }
+                String [] tokens = trimmed.split ("\\s+");
+                int prevIdx = ELEMENT_NOT_FOUND;
+                for (int i=0;i<tokens.length;i++){
+                    String word = normalizeWord(tokens[i]);
+                    int currIdx = findIndex(vocabulary, word);
+                    if (prevIdx != ELEMENT_NOT_FOUND && currIdx != ELEMENT_NOT_FOUND) {
+                        counts[prevIdx][currIdx]++;
+                    }
+                    prevIdx = currIdx;
+                }
+
+            }
+            return counts;
+        }
     }
 
     /*
@@ -97,15 +147,65 @@ public class BigramModel {
      * @pre: fileName is a legal file path
      */
     public void saveModel(String fileName) throws IOException { // Question 3
-        // TODO: implement
+        try (BufferedWriter vocWriter = new BufferedWriter(new FileWriter(fileName + VOC_FILE_SUFFIX))){
+            vocWriter.write(mVocabulary.length +" words");
+            vocWriter.newLine();
+            for (int i = 0; i < mVocabulary.length;i++){
+                vocWriter.write(i + "," + mVocabulary[i]);
+                vocWriter.newLine();
+            }
+        }
+        try (BufferedWriter countsWriter = new BufferedWriter(new FileWriter(fileName + COUNTS_FILE_SUFFIX))) {
+            for (int i = 0; i < mBigramCounts.length; i++){
+                for (int j = 0; j < mBigramCounts[0].length; j++){
+                    if (mBigramCounts[i][j] > 0){
+                        countsWriter.write (i + "," + j + ":" + mBigramCounts[i][j]);
+                        countsWriter.newLine();
+                    }
+                }
+            }
+        }
     }
 
     /*
      * @pre: fileName is a legal file path
      */
     public void loadModel(String fileName) throws IOException { // Question 4
-        // TODO: implement
+        int n;
+        String[] newVocab;
+        try (BufferedReader vocReader = new BufferedReader(new FileReader(fileName + VOC_FILE_SUFFIX))) {
+            String firstLine = vocReader.readLine();
+            n = Integer.parseInt(firstLine.split(" ")[0]);
+            newVocab = new String[n];
+            for (int i = 0; i < n; i++) {
+                String line = vocReader.readLine();
+                int commaIdx = line.indexOf(',');
+                int idx = Integer.parseInt(line.substring(0, commaIdx));
+                String word = line.substring(commaIdx + 1);
+                newVocab[idx] = word;
+            }
+        }
+
+        int[][] newCounts = new int[n][n];
+        try (BufferedReader countsReader = new BufferedReader(new FileReader(fileName + COUNTS_FILE_SUFFIX))) {
+            String line;
+            while ((line = countsReader.readLine()) != null) {
+                if (line.isEmpty()) {
+                    continue;
+                }
+                int commaIdx = line.indexOf(',');
+                int colonIdx = line.indexOf(':');
+                int i = Integer.parseInt(line.substring(0, commaIdx));
+                int j = Integer.parseInt(line.substring(commaIdx + 1, colonIdx));
+                int count = Integer.parseInt(line.substring(colonIdx + 1));
+                newCounts[i][j] = count;
+            }
+        }
+
+        mVocabulary = newVocab;
+        mBigramCounts = newCounts;
     }
+    
 
     /*
      * @pre: sentence is in lowercase
@@ -114,8 +214,19 @@ public class BigramModel {
      * @post: if sentence is probable, according to the model, $ret = true, else, $ret = false
      */
     public boolean isLegalSentence(String sentence) { // Question 5
-        // TODO: implement
-        return false;
+        if (sentence.isEmpty()) {
+            return true;
+        }
+        String[] words = sentence.split(" ");
+        if (words.length == 1) {
+            return getWordIndex(words[0]) != ELEMENT_NOT_FOUND;
+        }
+        for (int i = 0; i < words.length - 1; i++) {
+            if (getBigramCount(words[i], words[i + 1]) == 0) {
+                return false;
+            }
+        }
+        return true;
     }
 
     ///////////////////////////////////////////////////////////////////////////
@@ -206,4 +317,5 @@ public class BigramModel {
         // A vocabulary with a single word: the closest word is the word itself
         return best == ELEMENT_NOT_FOUND ? word : mVocabulary[best];
     }
+
 }
